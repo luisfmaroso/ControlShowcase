@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>ControlShowcase &mdash; Project Doc</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+<main>
+
+<h1>ControlShowcase</h1>
+<p class="subtitle">A teaching simulator for closed-loop position control of a bidirectional hydraulic cylinder driven by a PWM proportional valve. Built with <strong>Python + Qt Widgets (PySide6)</strong> and <strong>pyqtgraph</strong>. Current phase: <strong>Phase 1 &mdash; plant core</strong>.</p>
+
+<nav class="toc">
+  <strong>Contents</strong>
+  <ol>
+    <li><a href="#overview">Project overview</a></li>
+    <li><a href="#phase">Current phase</a></li>
+    <li><a href="#stack">Tech stack</a></li>
+    <li><a href="#tree">Folder structure</a></li>
+    <li><a href="#how">How it works (architecture)</a></li>
+    <li><a href="#plant">The plant model</a></li>
+    <li><a href="#build">Build &amp; run instructions</a></li>
+    <li><a href="#roadmap">Roadmap &mdash; the step-by-step plan</a></li>
+    <li><a href="#changelog">Changelog</a></li>
+  </ol>
+</nav>
+
+<h2 id="overview">1. Project overview</h2>
+<p>
+  <strong>ControlShowcase</strong> is a desktop application for <strong>learning control systems by
+  watching them run</strong>. It simulates a <strong>bidirectional hydraulic cylinder</strong> whose
+  position is driven by a <strong>PWM electronic proportional valve</strong>, and lets you control that
+  cylinder several ways &mdash; by hand, with a PID controller, or with a model-predictive controller
+  (MPC) &mdash; so the behaviour of each can be seen and compared on the very same plant.
+</p>
+<p>
+  The point is pedagogical. A <strong>manual</strong> mode builds intuition for the open-loop plant; a
+  <strong>PID</strong> mode with live <strong>P / I / D</strong> sliders makes the effect of each term
+  visible in real time; an <strong>MPC</strong> mode &mdash; written from scratch in plain numpy so the
+  maths is legible &mdash; invites a direct comparison with PID. A final
+  <strong>auto-calibration</strong> step discovers the valve's deadband and proposes a reasonable PID
+  tuning automatically.
+</p>
+<p>
+  It is the control-systems sibling of <strong>CsvPlotter</strong> and follows the same conventions:
+  <strong>PySide6 + pyqtgraph</strong>, a hand-coded dark UI, a three-layer architecture, and this
+  <code>index.html</code> + shared <code>style.css</code> as a living document with a phased roadmap and a
+  changelog. Its CSV export (a later phase) feeds straight back into CsvPlotter.
+</p>
+
+<h2 id="phase">2. Current phase <span class="badge">Phase 1 &mdash; plant core</span></h2>
+<p>
+  The <strong>plant</strong> is built and verified headless. The <code>sim/</code> package now contains the
+  <code>Valve</code>, the <code>Plant</code> (the second-order cylinder), and the <code>Simulator</code>
+  that integrates them at a fixed 200&nbsp;Hz step and keeps a rolling history. There is no GUI control of
+  it yet &mdash; that is Phase 2, which wires a <code>QTimer</code> loop and a Manual PWM slider to drive
+  the plant and animate the cylinder and plot.
+</p>
+<p>
+  The scaffold from Phase 0 remains: a themed window with its three zones &mdash; the <strong>control
+  panel</strong> (left dock, Manual / PID / MPC / Calibration tabs), the <strong>cylinder view</strong>, and
+  the <strong>plot</strong> &mdash; with the tabs and the live loop still placeholders.
+</p>
+
+<h2 id="stack">3. Tech stack</h2>
+<table>
+  <tr><th>Area</th><th>Choice</th></tr>
+  <tr><td>Language</td><td>Python 3.10+ (<code>from __future__ import annotations</code>)</td></tr>
+  <tr><td>GUI</td><td>Qt 6 Widgets via <strong>PySide6</strong> (hand-coded, no <code>.ui</code> files)</td></tr>
+  <tr><td>Plotting</td><td><strong>pyqtgraph</strong> &mdash; a Qt-native, interactive plotting widget</td></tr>
+  <tr><td>Maths</td><td><strong>numpy</strong> &mdash; the plant integration and the MPC optimisation</td></tr>
+  <tr><td>Animation</td><td>a custom-painted <code>QWidget</code> (<code>QPainter</code>) for the cylinder</td></tr>
+  <tr><td>Packaging (later)</td><td>PyInstaller for a standalone Windows build</td></tr>
+  <tr><td>Platform</td><td>Windows first; pure-Python so Linux/macOS follow for free</td></tr>
+</table>
+<p>
+  <strong>Why numpy-only for MPC?</strong> The teaching value is in seeing the prediction and the cost
+  function, not in a black-box solver. A small receding-horizon problem with box constraints is solved
+  directly in numpy, so every step &mdash; the prediction matrices, the tracking/effort cost, the clamp to
+  the PWM limits &mdash; is right there in the code. No cvxpy, no scipy.
+</p>
+
+<h2 id="tree">4. Folder structure</h2>
+<div class="tree">ControlShowcase/
+├── main.py                       <span class="cm"># entry point: QApplication + dark theme + MainWindow</span>
+├── requirements.txt              <span class="cm"># PySide6, pyqtgraph, numpy</span>
+├── controlshowcase/
+│   ├── __init__.py               <span class="cm"># __version__</span>
+│   ├── main_window.py            <span class="cm"># layout + wiring + (later) the simulation loop</span>
+│   ├── sim/                      <span class="cm"># the plant (model layer, no Qt)</span>
+│   │   ├── valve.py              <span class="cm"># PWM valve: deadband, saturation, first-order lag</span>
+│   │   ├── plant.py              <span class="cm"># cylinder: 2nd-order dynamics + nonlinearities</span>
+│   │   └── simulator.py          <span class="cm"># fixed-step integrator, state + rolling history</span>
+│   ├── control/                  <span class="cm"># controllers (no Qt)</span>
+│   │   ├── base.py               <span class="cm"># Controller ABC: reset / compute(setpoint, meas, dt)</span>
+│   │   ├── manual.py             <span class="cm"># passthrough PWM</span>
+│   │   ├── pid.py                <span class="cm"># PID with anti-windup</span>
+│   │   ├── mpc.py                <span class="cm"># receding-horizon MPC (numpy)</span>
+│   │   └── calibration.py        <span class="cm"># deadband finder + PID auto-tune</span>
+│   └── ui/
+│       ├── theme.py              <span class="cm"># shared colour palette</span>
+│       ├── control_panel.py      <span class="cm"># tabbed Manual / PID / MPC / Calibration controls</span>
+│       ├── cylinder_view.py      <span class="cm"># the animated cylinder (QPainter)</span>
+│       └── plot_view.py          <span class="cm"># pyqtgraph: setpoint + position over time</span>
+└── docs/
+    ├── index.html                <span class="cm"># this document</span>
+    └── style.css                 <span class="cm"># shared with CsvPlotter</span></div>
+
+<h2 id="how">5. How it works (architecture)</h2>
+<p>
+  The design uses the same three-layer separation as CsvPlotter, with a control layer added between the
+  plant and the UI:
+</p>
+<ul>
+  <li><strong>The plant (<code>sim/</code>)</strong> &mdash; the physics. A <code>Valve</code> turns a PWM
+      command into a spool position; a <code>Plant</code> (the cylinder) turns that into motion; a
+      <code>Simulator</code> owns the state, advances it one fixed step at a time, and keeps a rolling
+      history of <code>(t, setpoint, position, pwm, error)</code>. No Qt here at all.</li>
+  <li><strong>The controllers (<code>control/</code>)</strong> &mdash; each implements the same tiny
+      interface, <code>compute(setpoint, measurement, dt) &rarr; pwm</code>: manual passthrough, PID, and
+      MPC. They are pure functions of their inputs and their own state; they don't know about Qt or the
+      simulator.</li>
+  <li><strong>The UI (<code>ui/</code>)</strong> &mdash; the control panel emits signals when parameters or
+      the mode change; the cylinder view and the plot are told what to draw. Widgets never mutate the
+      plant.</li>
+  <li><strong><code>MainWindow</code></strong> &mdash; the glue. It owns the <code>Simulator</code> and the
+      active <code>Controller</code>, runs a <code>QTimer</code>, and on each tick does
+      <code>pwm = controller.compute(&hellip;)</code> &rarr; <code>simulator.step(pwm, dt)</code> &rarr;
+      refresh the cylinder view and the plot.</li>
+</ul>
+<p>
+  The single source of truth is the <code>Simulator</code>'s state and history; everything the user sees is
+  a view of it, the same discipline CsvPlotter uses with its <code>Series</code> model.
+</p>
+
+<h2 id="plant">6. The plant model</h2>
+<p>
+  The cylinder is simulated as a <strong>second-order system with realistic nonlinearities</strong>, which is
+  exactly what makes the controllers interesting to compare. Implemented in <code>sim/</code> across three
+  small, Qt-free modules &mdash; <code>valve.py</code>, <code>plant.py</code>, <code>simulator.py</code>.
+</p>
+<h3>The valve</h3>
+<p>
+  Input is a PWM command in <code>[-100, +100]</code>. It passes through a <strong>deadband</strong> (no flow
+  until the command exceeds a threshold), a <strong>saturation</strong> (clamped to &plusmn;100), and a
+  <strong>first-order lag</strong> (the spool can't move instantly): <code>s += (eff - s) &middot; dt/&tau;</code>.
+</p>
+<h3>The cylinder</h3>
+<p>
+  State is position <code>x</code> and velocity <code>v</code>. The spool position commands a flow, which sets
+  a target velocity with <strong>asymmetric gains</strong> for extend vs. retract (the bore and rod sides have
+  different areas). Net force subtracts <strong>viscous and Coulomb friction</strong>; the result is integrated
+  to velocity then position, with <strong>end-stops</strong> that clamp the stroke. Deadband, asymmetry,
+  saturation, and friction together are why a single fixed PID can't be perfect everywhere &mdash; and why
+  MPC's preview can help.
+</p>
+<h3>The simulator</h3>
+<p>
+  <code>Simulator</code> owns one <code>Valve</code> and one <code>Plant</code>, the current setpoint, and a
+  rolling history of <code>(t, setpoint, position, pwm, error)</code> (a fixed-length deque, exposed as numpy
+  arrays for the plot). Each <code>step(pwm)</code> advances the valve then the plant by one fixed step
+  (default <strong>200&nbsp;Hz</strong>) and records a sample &mdash; this is the single source of truth the
+  UI reads. Default plant: 500&nbsp;mm stroke, ~180&nbsp;mm/s extend vs. ~240&nbsp;mm/s retract, 8% valve
+  deadband.
+</p>
+<p>
+  Run <code>python -m controlshowcase.sim.simulator</code> for the headless sanity checks (deadband leak,
+  open-loop ramp, extend-vs-retract asymmetry, end-stop saturation) plus a printed step response.
+</p>
+
+<h2 id="build">7. Build &amp; run instructions</h2>
+<p>No compiler needed &mdash; it's pure Python.</p>
+<pre><code><span class="c"># 1. Create and activate a virtual environment (Windows PowerShell)</span>
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+
+<span class="c"># 2. Install dependencies</span>
+pip install -r requirements.txt
+
+<span class="c"># 3. Run</span>
+python main.py</code></pre>
+<p><code>requirements.txt</code>:</p>
+<pre><code>PySide6
+pyqtgraph
+numpy</code></pre>
+<p>
+  Later, a one-file Windows executable can be produced with
+  <code>pyinstaller --noconsole --onefile main.py</code>.
+</p>
+
+<h2 id="roadmap">8. Roadmap &mdash; the step-by-step plan</h2>
+<p>Each phase is small enough to build, run, and verify before moving on, and ends by updating this document &mdash; the same incremental approach as CsvPlotter.</p>
+<table>
+  <tr><th>Phase</th><th>Scope</th><th>State</th></tr>
+  <tr><td>0</td><td><strong>Scaffold.</strong> Package layout, dark theme, the three-zone window (control dock, cylinder view, empty plot), and this doc skeleton.</td><td class="done">done</td></tr>
+  <tr><td>1</td><td><strong>Plant core.</strong> <code>valve.py</code>, <code>plant.py</code>, <code>simulator.py</code> &mdash; the second-order cylinder with deadband, saturation, valve lag, area asymmetry, friction, and end-stops. Verified headless.</td><td class="done">done</td></tr>
+  <tr><td>2</td><td><strong>Live view + Manual mode.</strong> Rolling pyqtgraph plot of setpoint vs. position, the animated cylinder, the QTimer loop, and a Manual tab with a PWM slider.</td><td class="now">next</td></tr>
+  <tr><td>3</td><td><strong>PID.</strong> Controller interface + a PID with anti-windup; a PID tab with live P / I / D and an error readout.</td><td class="todo">planned</td></tr>
+  <tr><td>4</td><td><strong>MPC.</strong> A numpy receding-horizon controller with a prediction model and box-constrained effort; an MPC tab; PID&harr;MPC comparison.</td><td class="todo">planned</td></tr>
+  <tr><td>5</td><td><strong>Auto-calibration.</strong> Deadband finder + PID auto-tune under stated constraints, applied from a Calibration tab.</td><td class="todo">planned</td></tr>
+  <tr><td>6</td><td><strong>Polish.</strong> PID-vs-MPC overlay, CSV export (into CsvPlotter), presets, disturbance injection, packaging.</td><td class="todo">planned</td></tr>
+</table>
+
+<h2 id="changelog">9. Changelog</h2>
+<ul>
+  <li><strong>2026-06-18 &mdash; Phase 1: plant core.</strong> Built the <code>sim/</code> package &mdash;
+      the model layer, no Qt. <code>valve.py</code> (<code>Valve</code> + <code>ValveParams</code>) maps a
+      &plusmn;100 PWM command to a signed spool position through <strong>saturation</strong>, a
+      <strong>deadband</strong> (re-scaled so motion starts at the edge and reaches full at &plusmn;100), and
+      an exact discrete <strong>first-order lag</strong>. <code>plant.py</code> (<code>Plant</code> +
+      <code>PlantParams</code>) is the second-order cylinder: a hydraulic drive force
+      <code>k_hyd&middot;(v_cmd&minus;v)</code> against viscous + <code>tanh</code>-smoothed Coulomb friction
+      and an optional load, integrated to velocity then position with <strong>end-stops</strong> and
+      <strong>extend/retract area asymmetry</strong> (180 vs. 240&nbsp;mm/s defaults).
+      <code>simulator.py</code> (<code>Simulator</code> + <code>SimSample</code>) owns the valve, the plant,
+      the setpoint, and a rolling 200&nbsp;Hz history exposed as numpy arrays &mdash; the single source of
+      truth for the UI. A <code>__main__</code> block runs headless sanity checks. <strong>Verified</strong>
+      via <code>python -m controlshowcase.sim.simulator</code>: deadband (no motion at PWM=5), open-loop ramp,
+      asymmetry (extend ~36 vs. retract ~48&nbsp;mm/s over 0.2&nbsp;s), end-stop saturation (x=stroke, v=0),
+      and a step response settling to ~103.5&nbsp;mm/s at PWM=70 &mdash; all consistent with the model.</li>
+  <li><strong>2026-06-18 &mdash; Phase 0: scaffold.</strong> Created the project: <code>main.py</code> with
+      the dark Fusion palette ported from CsvPlotter, the <code>controlshowcase</code> package with its
+      <code>sim/</code>, <code>control/</code>, and <code>ui/</code> layers stubbed out, and a
+      <code>MainWindow</code> laying out the three zones &mdash; a left <strong>Control</strong> dock with a
+      four-tab <code>ControlPanel</code> (Manual / PID / MPC / Calibration placeholders), a custom-painted
+      <code>CylinderView</code> (static barrel + piston + rod) above a themed, empty
+      <code>PlotView</code> (pyqtgraph, Time/Position axes) in a vertical splitter. Added a shared
+      <code>ui/theme.py</code> palette, File / View / Help menus with an About box, <code>requirements.txt</code>
+      (PySide6, pyqtgraph, numpy), the README, and this document. The window launches and lays out correctly.</li>
+  <li><strong>2026-06-18 &mdash; Planning.</strong> Scope agreed: a control-systems showcase &mdash; a
+      simulated bidirectional hydraulic cylinder with a PWM proportional valve, controlled in Manual, PID,
+      and MPC modes, plus auto-calibration of the valve deadband and PID gains. Decisions: name
+      <strong>ControlShowcase</strong>, <strong>numpy-only MPC</strong>, and a <strong>second-order plant
+      with nonlinearities</strong>. UI style mirrors CsvPlotter. Architecture, folder layout, and the
+      six-phase roadmap drafted.</li>
+</ul>
+
+</main>
+</body>
+</html>
