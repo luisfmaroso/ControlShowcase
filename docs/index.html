@@ -9,7 +9,7 @@
 <main>
 
 <h1>ControlShowcase</h1>
-<p class="subtitle">A teaching simulator for closed-loop position control of a bidirectional hydraulic cylinder driven by a PWM proportional valve. Built with <strong>Python + Qt Widgets (PySide6)</strong> and <strong>pyqtgraph</strong>. Current phase: <strong>Phase 1 &mdash; plant core</strong>.</p>
+<p class="subtitle">A teaching simulator for closed-loop position control of a bidirectional hydraulic cylinder driven by a PWM proportional valve. Built with <strong>Python + Qt Widgets (PySide6)</strong> and <strong>pyqtgraph</strong>. Current phase: <strong>Phase 3 &mdash; PID</strong>.</p>
 
 <nav class="toc">
   <strong>Contents</strong>
@@ -49,18 +49,20 @@
   changelog. Its CSV export (a later phase) feeds straight back into CsvPlotter.
 </p>
 
-<h2 id="phase">2. Current phase <span class="badge">Phase 1 &mdash; plant core</span></h2>
+<h2 id="phase">2. Current phase <span class="badge">Phase 3 &mdash; PID</span></h2>
 <p>
-  The <strong>plant</strong> is built and verified headless. The <code>sim/</code> package now contains the
-  <code>Valve</code>, the <code>Plant</code> (the second-order cylinder), and the <code>Simulator</code>
-  that integrates them at a fixed 200&nbsp;Hz step and keeps a rolling history. There is no GUI control of
-  it yet &mdash; that is Phase 2, which wires a <code>QTimer</code> loop and a Manual PWM slider to drive
-  the plant and animate the cylinder and plot.
+  The loop now <strong>closes</strong>. A new <code>control/</code> layer holds one <code>Controller</code>
+  per mode behind a tiny interface &mdash; <code>compute(setpoint, measurement, dt) &rarr; pwm</code> &mdash;
+  and the active one is chosen by the control panel's current tab. The <strong>PID</strong> tab exposes live
+  <strong>P / I / D</strong> spin-boxes (plus an error/output readout); dragging them retunes the controller
+  in place so the effect of each term is immediately visible on the plot. The valve <strong>PWM
+  command</strong> is drawn as a green trace on a secondary right axis, so a controller's effort and its
+  saturation are on screen.
 </p>
 <p>
-  The scaffold from Phase 0 remains: a themed window with its three zones &mdash; the <strong>control
-  panel</strong> (left dock, Manual / PID / MPC / Calibration tabs), the <strong>cylinder view</strong>, and
-  the <strong>plot</strong> &mdash; with the tabs and the live loop still placeholders.
+  Both <strong>Manual</strong> (the slider, modelled as a passthrough controller) and <strong>PID</strong>
+  are live; switching tabs swaps and resets the active controller. The shared header (setpoint,
+  Run/Pause, Reset) is unchanged. MPC / Calibration remain placeholders until their phases.
 </p>
 
 <h2 id="stack">3. Tech stack</h2>
@@ -165,6 +167,15 @@
   deadband.
 </p>
 <p>
+  <strong>Sensor noise.</strong> <code>measure()</code> returns the true position plus configurable Gaussian
+  noise (std-dev in mm, set in the control panel; 0 = perfect sensor). The controller acts on this noisy
+  <em>measured</em> value &mdash; and the plot's position trace shows it &mdash; while the cylinder animation
+  keeps showing the true position. Following the discrete-control convention, each step records the sample
+  (state + measurement + command) <em>before</em> integrating forward, so the measurement and the true
+  position stay aligned (identical when noise is off). This makes the cost of an aggressive D term obvious:
+  it amplifies the noise straight into the PWM command.
+</p>
+<p>
   Run <code>python -m controlshowcase.sim.simulator</code> for the headless sanity checks (deadband leak,
   open-loop ramp, extend-vs-retract asymmetry, end-stop saturation) plus a printed step response.
 </p>
@@ -195,15 +206,63 @@ numpy</code></pre>
   <tr><th>Phase</th><th>Scope</th><th>State</th></tr>
   <tr><td>0</td><td><strong>Scaffold.</strong> Package layout, dark theme, the three-zone window (control dock, cylinder view, empty plot), and this doc skeleton.</td><td class="done">done</td></tr>
   <tr><td>1</td><td><strong>Plant core.</strong> <code>valve.py</code>, <code>plant.py</code>, <code>simulator.py</code> &mdash; the second-order cylinder with deadband, saturation, valve lag, area asymmetry, friction, and end-stops. Verified headless.</td><td class="done">done</td></tr>
-  <tr><td>2</td><td><strong>Live view + Manual mode.</strong> Rolling pyqtgraph plot of setpoint vs. position, the animated cylinder, the QTimer loop, and a Manual tab with a PWM slider.</td><td class="now">next</td></tr>
-  <tr><td>3</td><td><strong>PID.</strong> Controller interface + a PID with anti-windup; a PID tab with live P / I / D and an error readout.</td><td class="todo">planned</td></tr>
-  <tr><td>4</td><td><strong>MPC.</strong> A numpy receding-horizon controller with a prediction model and box-constrained effort; an MPC tab; PID&harr;MPC comparison.</td><td class="todo">planned</td></tr>
+  <tr><td>2</td><td><strong>Live view + Manual mode.</strong> Rolling pyqtgraph plot of setpoint vs. position, the animated cylinder, the QTimer loop, and a Manual tab with a PWM slider.</td><td class="done">done</td></tr>
+  <tr><td>3</td><td><strong>PID.</strong> Controller interface + a PID with anti-windup; a PID tab with live P / I / D and an error readout.</td><td class="done">done</td></tr>
+  <tr><td>4</td><td><strong>MPC.</strong> A numpy receding-horizon controller with a prediction model and box-constrained effort; an MPC tab; PID&harr;MPC comparison.</td><td class="now">next</td></tr>
   <tr><td>5</td><td><strong>Auto-calibration.</strong> Deadband finder + PID auto-tune under stated constraints, applied from a Calibration tab.</td><td class="todo">planned</td></tr>
   <tr><td>6</td><td><strong>Polish.</strong> PID-vs-MPC overlay, CSV export (into CsvPlotter), presets, disturbance injection, packaging.</td><td class="todo">planned</td></tr>
 </table>
 
 <h2 id="changelog">9. Changelog</h2>
 <ul>
+  <li><strong>2026-06-18 &mdash; Sensor noise.</strong> Added a configurable <strong>sensor-noise</strong>
+      option: a &ldquo;Sensor noise &sigma;&rdquo; field in the control-panel header (mm, default&nbsp;0) sets
+      the std-dev of Gaussian noise added to the measured position. The <code>Simulator</code> gained
+      <code>noise_std</code>, <code>set_noise_std()</code>, and <code>measure()</code>; the loop now feeds the
+      controller the noisy measurement, and <code>SimSample</code> carries both the true <code>position</code>
+      (cylinder animation) and the noisy <code>measured</code> value (the blue plot trace). <code>step()</code>
+      was reordered to record-then-advance so measurement and true position stay aligned (identical at
+      &sigma;=0). <strong>Verified</strong>: at &sigma;=0 measured equals true exactly; at &sigma;=5 the
+      empirical std is ~5&nbsp;mm while PID still holds the true position near the setpoint, and the cylinder
+      tracks the true (clean) position.</li>
+  <li><strong>2026-06-18 &mdash; PID controls fix.</strong> Fixed the P/I/D (and setpoint) spin-boxes. Under
+      a comma-decimal system locale (e.g. pt-BR) a typed <code>1.5</code> was read as the thousands group
+      <code>15</code>, which exceeded the gain ceilings and was silently rejected &mdash; so values above 1
+      could only be reached with the arrows. Added a <code>DecimalSpinBox</code> that forces <code>.</code> as
+      the display separator and accepts both <code>.</code> and <code>,</code> on input, and
+      <strong>removed the gain limits</strong> (range now 0&hellip;1e6) so extreme tunings can be explored.
+      Verified: typing <code>2.5</code>, <code>3,5</code>, and <code>5000</code> all parse correctly, and
+      extreme gains (kp&nbsp;5000, ki&nbsp;2000) keep the loop finite and bounded (PWM saturates at 100%, the
+      rod stays within the stroke).</li>
+  <li><strong>2026-06-18 &mdash; Phase 3: PID.</strong> Closed the loop. Added the <code>control/</code>
+      package: <code>base.py</code> (the <code>Controller</code> ABC &mdash;
+      <code>compute(setpoint, measurement, dt) &rarr; pwm</code> &mdash; plus <code>clamp_pwm</code> and the
+      &plusmn;100 limit), <code>manual.py</code> (<code>ManualController</code>, a slider passthrough so the
+      loop is uniform across modes), and <code>pid.py</code> (<code>PIDController</code> + <code>PIDGains</code>):
+      a PID with <strong>output clamping</strong>, <strong>conditional-integration anti-windup</strong>, and a
+      <strong>filtered derivative on the measurement</strong> (no setpoint-step kick). The MainWindow now keeps
+      one controller per mode, runs the active one each fixed sim step (200&nbsp;Hz, closed loop), and the
+      panel's current tab selects/resets it. <code>ControlPanel</code> gained a live <strong>PID tab</strong>
+      (P/I/D spin-boxes with units + an error/output readout) emitting <code>pid_gains_changed</code>, and a
+      <code>mode_changed</code> signal. <code>PlotView</code> grew a <strong>PWM trace</strong> on a secondary
+      right axis (%), toggled from <strong>View &rarr; Show PWM trace</strong>. <strong>Verified</strong>
+      offscreen: default gains take a 300&nbsp;mm step to 301.6&nbsp;mm (~13% overshoot, peak 339), a step down
+      to 120 settles at 121.5, live <code>kp</code> retune carries the integral across, and switching back to
+      Manual with the slider at 0 coasts to a stop. The small steady-state offset is the deadband/Coulomb
+      friction &mdash; a deliberate teaching point for the I term.</li>
+  <li><strong>2026-06-18 &mdash; Phase 2: live view + Manual mode.</strong> Wired the loop. The MainWindow
+      now owns a <code>Simulator</code> and a <code>QTimer</code> (~50&nbsp;Hz); each tick advances the sim by
+      <code>round(20ms / dt) = 4</code> fixed 200&nbsp;Hz steps and refreshes the views, keeping sim-time
+      close to wall-time. <code>PlotView</code> gained two curves &mdash; setpoint (dashed orange) and
+      position (blue) &mdash; with a fixed Y axis to the stroke and a <strong>rolling X window</strong> driven
+      by <code>update_data()</code>; <code>CylinderView</code> is fed <code>position_fraction</code> /
+      <code>setpoint_fraction</code> each tick. <code>ControlPanel</code> was rebuilt as a shared header
+      (setpoint spin-box, Run/Pause, Reset) above the tabs, with a live <strong>Manual</strong> tab
+      (<code>ManualTab</code>: a &plusmn;100 PWM slider + readout + &ldquo;Return to 0&rdquo;) emitting
+      <code>manual_pwm_changed</code>; setpoint/run/reset emit their own signals. <strong>Verified</strong>
+      offscreen: driving +60% PWM for ~2&nbsp;s moved the rod to 164&nbsp;mm (matching the open-loop model),
+      400 history samples recorded over 100 ticks, and Pause/Run toggled the timer while Reset zeroed the
+      plant, the PWM, and the slider.</li>
   <li><strong>2026-06-18 &mdash; Phase 1: plant core.</strong> Built the <code>sim/</code> package &mdash;
       the model layer, no Qt. <code>valve.py</code> (<code>Valve</code> + <code>ValveParams</code>) maps a
       &plusmn;100 PWM command to a signed spool position through <strong>saturation</strong>, a

@@ -8,6 +8,7 @@ object (position, history); it never writes to the plant directly.
 
 from __future__ import annotations
 
+import random
 from collections import deque
 from dataclasses import dataclass
 
@@ -19,16 +20,17 @@ from .valve import Valve, ValveParams
 DEFAULT_DT = 1.0 / 200.0  # 200 Hz fixed simulation step
 DEFAULT_WINDOW_S = 20.0   # rolling history length kept for the plot
 
-_CHANNELS = ("t", "setpoint", "position", "pwm", "error")
+_CHANNELS = ("t", "setpoint", "position", "measured", "pwm", "error")
 
 
 @dataclass
 class SimSample:
     t: float
     setpoint: float
-    position: float
+    position: float   # true cylinder position (drives the animation)
+    measured: float   # the noisy sensor reading the controller acts on
     pwm: float
-    error: float
+    error: float      # setpoint - measured (the error the controller sees)
 
 
 class Simulator:
@@ -44,6 +46,8 @@ class Simulator:
         self.plant = Plant(plant_params)
         self.setpoint = 0.0
         self.t = 0.0
+        self.noise_std = 0.0          # sensor noise std-dev (mm); 0 = perfect sensor
+        self._last_measured: float | None = None
         maxlen = max(2, int(round(window_s / dt)))
         self._hist: deque[SimSample] = deque(maxlen=maxlen)
 
@@ -53,23 +57,43 @@ class Simulator:
         self.plant.reset(x0)
         self.setpoint = x0
         self.t = 0.0
+        self._last_measured = None
         self._hist.clear()
 
     def set_setpoint(self, mm: float) -> None:
         self.setpoint = max(0.0, min(self.plant.params.stroke, mm))
 
+    def set_noise_std(self, mm: float) -> None:
+        self.noise_std = max(0.0, mm)
+
+    def measure(self) -> float:
+        """A sensor reading of the current position: the true position plus Gaussian
+        noise. The controller acts on this, not on the true state."""
+        noise = random.gauss(0.0, self.noise_std) if self.noise_std > 0.0 else 0.0
+        self._last_measured = self.plant.x + noise
+        return self._last_measured
+
     def step(self, pwm: float) -> SimSample:
-        spool = self.valve.update(pwm, self.dt)
-        position = self.plant.step(spool, self.dt)
-        self.t += self.dt
+        # Textbook discrete control: at time t we have state x(t), its measurement
+        # y(t), and the command u(t); we record that sample, then apply u(t) to
+        # advance to x(t+dt). Recording before advancing keeps the measurement and the
+        # true position aligned at the same instant (so with no noise they are equal).
+        measured = self._last_measured if self._last_measured is not None else self.plant.x
+        self._last_measured = None
+
         sample = SimSample(
             t=self.t,
             setpoint=self.setpoint,
-            position=position,
+            position=self.plant.x,
+            measured=measured,
             pwm=pwm,
-            error=self.setpoint - position,
+            error=self.setpoint - measured,
         )
         self._hist.append(sample)
+
+        spool = self.valve.update(pwm, self.dt)
+        self.plant.step(spool, self.dt)
+        self.t += self.dt
         return sample
 
     # --- views for the UI ----------------------------------------------
@@ -95,6 +119,7 @@ class Simulator:
             "t": np.fromiter((s.t for s in self._hist), float, n),
             "setpoint": np.fromiter((s.setpoint for s in self._hist), float, n),
             "position": np.fromiter((s.position for s in self._hist), float, n),
+            "measured": np.fromiter((s.measured for s in self._hist), float, n),
             "pwm": np.fromiter((s.pwm for s in self._hist), float, n),
             "error": np.fromiter((s.error for s in self._hist), float, n),
         }

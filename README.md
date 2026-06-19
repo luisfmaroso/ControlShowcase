@@ -9,10 +9,11 @@ model-predictive controller chase the same setpoint.
 Built with **Python + Qt Widgets (PySide6)** and **pyqtgraph** — the same stack and
 visual style as the sibling **CsvPlotter** project.
 
-> **Status: Phase 1 — plant core.** The simulated valve + cylinder + fixed-step
-> integrator are built and verified headless; the live GUI loop and Manual mode
-> arrive in Phase 2. See [`docs/index.html`](docs/index.html) for the architecture
-> and the phased roadmap.
+> **Status: Phase 3 — PID.** The loop closes: a `control/` layer adds a `Controller`
+> interface, a manual passthrough, and a PID (anti-windup, filtered derivative) with
+> a live P/I/D tab. The plot now also shows the PWM command. MPC arrives in Phase 4.
+> See [`docs/index.html`](docs/index.html) for the architecture and the phased
+> roadmap.
 
 ---
 
