@@ -29,11 +29,16 @@ class CylinderView(QWidget):
         self._position = 0.5
         # Setpoint as a stroke fraction, or None when no target is set.
         self._setpoint: float | None = None
+        # Load as a 0..1 fraction; drives the size of the weight on the rod.
+        self._load = 0.0
 
-    def set_state(self, position: float, setpoint: float | None = None) -> None:
-        """Update the drawn piston/target. ``position`` is a 0..1 stroke fraction."""
+    def set_state(
+        self, position: float, setpoint: float | None = None, load: float = 0.0
+    ) -> None:
+        """Update the drawn piston/target/load. ``position`` is a 0..1 stroke fraction."""
         self._position = max(0.0, min(1.0, position))
         self._setpoint = setpoint
+        self._load = max(0.0, min(1.0, load))
         self.update()
 
     def paintEvent(self, event) -> None:  # noqa: N802 (Qt naming)
@@ -64,6 +69,19 @@ class CylinderView(QWidget):
         painter.setBrush(QBrush(QColor(theme.COLOR_ROD)))
         painter.setPen(Qt.PenStyle.NoPen)
         painter.drawRect(rod)
+
+        # Load: a weight hanging from the rod tip, sized by the load fraction. It
+        # opposes extension, so it is the disturbance the controller has to fight.
+        if self._load > 0.0:
+            tip_x = rod.right()
+            tip_y = rod.center().y()
+            side = 12.0 + 30.0 * self._load
+            cable = 10.0
+            box = QRectF(tip_x - side / 2, tip_y + cable, side, side)
+            painter.setPen(QPen(QColor(theme.FOREGROUND), 1.0))
+            painter.drawLine(int(tip_x), int(tip_y), int(tip_x), int(tip_y + cable))
+            painter.setBrush(QBrush(QColor(theme.COLOR_LOAD)))
+            painter.drawRect(box)
 
         # Setpoint marker: a vertical line at the target stroke fraction.
         if self._setpoint is not None:

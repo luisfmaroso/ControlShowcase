@@ -47,7 +47,6 @@ class Simulator:
         self.setpoint = 0.0
         self.t = 0.0
         self.noise_std = 0.0          # sensor noise std-dev (mm); 0 = perfect sensor
-        self._last_measured: float | None = None
         maxlen = max(2, int(round(window_s / dt)))
         self._hist: deque[SimSample] = deque(maxlen=maxlen)
 
@@ -57,7 +56,6 @@ class Simulator:
         self.plant.reset(x0)
         self.setpoint = x0
         self.t = 0.0
-        self._last_measured = None
         self._hist.clear()
 
     def set_setpoint(self, mm: float) -> None:
@@ -66,28 +64,19 @@ class Simulator:
     def set_noise_std(self, mm: float) -> None:
         self.noise_std = max(0.0, mm)
 
-    def measure(self) -> float:
-        """A sensor reading of the current position: the true position plus Gaussian
-        noise. The controller acts on this, not on the true state."""
-        noise = random.gauss(0.0, self.noise_std) if self.noise_std > 0.0 else 0.0
-        self._last_measured = self.plant.x + noise
-        return self._last_measured
-
     def step(self, pwm: float) -> SimSample:
-        # Textbook discrete control: at time t we have state x(t), its measurement
-        # y(t), and the command u(t); we record that sample, then apply u(t) to
-        # advance to x(t+dt). Recording before advancing keeps the measurement and the
-        # true position aligned at the same instant (so with no noise they are equal).
-        measured = self._last_measured if self._last_measured is not None else self.plant.x
-        self._last_measured = None
-
+        # Sensor noise is added to the *measured* position only — the value shown on the
+        # plot. The controllers are driven by the true position (see MainWindow), so the
+        # noise never enters the PWM command. Record the sample before integrating
+        # forward so measured and true position are aligned at the same instant.
+        noise = random.gauss(0.0, self.noise_std) if self.noise_std > 0.0 else 0.0
         sample = SimSample(
             t=self.t,
             setpoint=self.setpoint,
             position=self.plant.x,
-            measured=measured,
+            measured=self.plant.x + noise,
             pwm=pwm,
-            error=self.setpoint - measured,
+            error=self.setpoint - self.plant.x,
         )
         self._hist.append(sample)
 

@@ -50,10 +50,18 @@ class Plant:
         self.params = params or PlantParams()
         self.x = x0
         self.v = 0.0
+        # External load force, settable at runtime (e.g. a weight on the rod).
+        # Positive opposes extending, like gravity on a lifted mass. Survives reset()
+        # since it is a property of the environment, not the cylinder's state.
+        self.external_load = params.load if params else 0.0
 
     def reset(self, x0: float = 0.0) -> None:
         self.x = x0
         self.v = 0.0
+
+    def set_load(self, force: float) -> None:
+        """Set the external load force (same units as the model's other forces)."""
+        self.external_load = force
 
     def step(self, spool: float, dt: float) -> float:
         """Advance position/velocity one step given the valve spool position (%)."""
@@ -66,7 +74,7 @@ class Plant:
         f_drive = p.k_hyd * (v_cmd - self.v)
         f_visc = p.b_visc * self.v
         f_coulomb = p.f_coulomb * math.tanh(self.v / p.v_eps)
-        f_net = f_drive - f_visc - f_coulomb - p.load
+        f_net = f_drive - f_visc - f_coulomb - self.external_load
 
         a = f_net / p.mass
         self.v += a * dt
@@ -87,3 +95,9 @@ class Plant:
     def position_fraction(self) -> float:
         """Position as a 0..1 stroke fraction (for the cylinder view)."""
         return self.x / self.params.stroke
+
+    @property
+    def extend_stall_force(self) -> float:
+        """The drive force available when extending at full spool and zero velocity —
+        i.e. the largest load the cylinder could ever hold while extending."""
+        return self.params.k_hyd * self.params.vmax_extend

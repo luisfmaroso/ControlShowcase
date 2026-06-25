@@ -24,3 +24,4 @@ COLOR_ERROR = "#d65f8a"     # pink — setpoint minus position
 COLOR_BARREL = "#3a4049"
 COLOR_PISTON = "#8a929c"
 COLOR_ROD = "#c8d0d8"
+COLOR_LOAD = "#c2603a"  # the weight hanging on the rod

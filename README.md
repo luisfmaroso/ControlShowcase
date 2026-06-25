@@ -1,5 +1,7 @@
 # ControlShowcase
 
+![ControlShowcase — PID tracking a setpoint step under load on a dark theme](docs/images/controlshowcase_example.png)
+
 A desktop **control-systems showcase**: a live simulation of automatic **position
 control of a bidirectional hydraulic cylinder** driven by a **PWM electronic
 proportional valve**. It's built to *see and feel* how different controllers behave
@@ -9,11 +11,11 @@ model-predictive controller chase the same setpoint.
 Built with **Python + Qt Widgets (PySide6)** and **pyqtgraph** — the same stack and
 visual style as the sibling **CsvPlotter** project.
 
-> **Status: Phase 3 — PID.** The loop closes: a `control/` layer adds a `Controller`
-> interface, a manual passthrough, and a PID (anti-windup, filtered derivative) with
-> a live P/I/D tab. The plot now also shows the PWM command. MPC arrives in Phase 4.
-> See [`docs/index.html`](docs/index.html) for the architecture and the phased
-> roadmap.
+> **Status: Phase 5 — auto-calibration.** All four modes are live: Manual, PID, MPC,
+> and a **safe model-based auto-calibration** that finds the valve deadband and tunes
+> PID gains with gentle bounded moves (no instability or sustained oscillation), then
+> applies them with one click. Phase 6 (polish: run overlays, CSV export, presets)
+> remains. See [`docs/index.html`](docs/index.html) for the architecture and roadmap.
 
 ---
 
